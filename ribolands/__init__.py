@@ -19,5 +19,6 @@ from .syswraps import sys_subopt_range
 from .syswraps import sys_suboptimals
 from .syswraps import sys_barriers
 from .syswraps import sys_treekin
+from .syswraps import sys_pourRNA
 
 from .crnwrapper import DiGraphSimulator

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
   BarMap.py -- cotranscriptional folding using *barriers* and *treekin*
@@ -85,9 +85,10 @@ def get_plot_data(tfiles, plist, args):
         # to replace every lmin at the current transcription step with the
         # trajectory (or None) => avoid duplicates with seen=set()!
 
-        traject = map(list, zip(*nxy))
-        timeline = map(lambda x: x + tot_time, traject[0])
-        tot_time = timeline[-1]
+        traject = list(map(list, zip(*nxy)))
+        #print(list(traject))
+        timeline = list(map(lambda x: x + tot_time, traject[0]))
+        tot_time = list(timeline)[-1]
 
         tlist[0].extend([timeline])
 
@@ -97,7 +98,7 @@ def get_plot_data(tfiles, plist, args):
 
         # Remove seen from this part to get all trajectries from start to end.
         seen = set()
-        pmapping = zip(*plist)[l - start]
+        pmapping = list(zip(*plist))[l - start]
         for e, idx in enumerate(pmapping, 1):
             # print start, l, pmapping, idx # traject, idx
             # Make sure that we are above the limit of detection
@@ -237,7 +238,7 @@ def plot_matplotlib(name, seq, tlist, plist, args):
         if finalmin not in seen:
             seen.add(finalmin)
             # NOTE: Adjust here for legend
-            if traject[-1] and max(traject[-1]) > 0.1:
+            if traject[-1] and max(traject[-1]) != None and max(traject[-1]) > 0.1:
                 # if fulltrajectory and max(fulltrajectory) > 0.1:
                 log.set_label("lmin {:d}".format(finalmin))
 
@@ -570,6 +571,123 @@ def pathlist(mapdata):
     return sorted(plist, key=lambda m: m[-1])
 
 
+def barmap_pourRNA(_bname, seq, args):
+    """ Print barriers files and mapping info """
+
+    bfiles = []
+    prog = ril.ProgressBar(args.stop - args.start + 1)
+    for e, l in enumerate(range(args.start, args.stop + 1)):
+        cseq = seq[0:l]
+        cname = "{}-len_{:02d}".format(_bname, l)
+        pname = "{}-len_{:02d}".format(_bname, l - 1)
+
+        if os.path.exists(pname + '.bar'):
+            with open(pname + '.bar', 'r') as oldbar, \
+                    open(pname + '.map', 'w') as mapfile:
+                for e, line in enumerate(oldbar):
+                    if e == 0:
+                        continue
+                    cols = line.strip().split()
+                    mapfile.write(cols[1] + '.' + "\n")
+            mfile = pname + '.map'
+        else:
+            mfile = ''
+
+        # Make sure the first round for mapping is always recomputed
+        # force = True if e == 1 else args.force
+
+        [ bfile, efile, rfile, msfile] = ril.sys_pourRNA(cname, cseq,
+                                                                         pourRNA='pourRNA',
+                                                                         max_energy=5,
+                                                                         k0=args.k0,
+                                                                         temp=args.temperature,
+                                                                         shift_moves=False,
+                                                                         rates=True,
+                                                                         binrates=True,
+                                                                         mfile=mfile,
+                                                                         force=False,
+                                                                         verb=args.verbose)
+        
+        psfile=None
+        bfiles.append([bfile, efile, rfile, psfile, msfile])
+        prog.inc()
+    return bfiles
+
+def create_mapped_structure_path(_bname, start,stop):
+    mapper = c.defaultdict(int)
+    cname = "{}-len_{:02d}".format(_bname, start)
+    states_file_from = cname + '.bar'
+    
+    cname_from = "{}-len_{:02d}".format(_bname, stop)
+    map_file_file = cname_from + '.ms'
+    
+    cname_from = "{}-len_{:02d}".format(_bname, stop)
+    states_file = cname_from + '.bar'
+    
+    map_structure_index = {}
+    with open(states_file, 'r') as f:
+        states_file_lines = f.readlines()
+        for l in states_file_lines:
+            match = re.match("^\s*(\d+)\s*([\.\(\)]+)\s*", l)
+            if match:
+                state_index = int(match.group(1))
+                structure = str(match.group(2))
+                map_structure_index[structure] = state_index
+
+    map_structure_index_from = {}
+    with open(states_file_from, 'r') as f:
+        states_file_lines = f.readlines()
+        for l in states_file_lines:
+            match = re.match("^\s*(\d+)\s*([\.\(\)]+)\s*", l)
+            if match:
+                state_index = int(match.group(1))
+                structure = str(match.group(2))
+                map_structure_index_from[structure] = state_index
+    
+    with open(map_file_file, 'r') as m:
+        lines = m.readlines()
+        for line in lines[1:]:
+            str_from_to = line.strip().split(", ")
+            str_from_minus_one_nt = str_from_to[0][:-1]
+            str_from_idx = map_structure_index_from[str_from_minus_one_nt]
+            str_to_idx = map_structure_index[str_from_to[1]]
+            mapper[str_from_idx] = str_to_idx
+    return mapper
+
+def barmap_mapping_pourRNA(_bname, seq, args):
+    """ Parse mapping info into pathlist """
+    tmpdir = args.tmpdir
+    start = args.start
+    stop = args.stop
+    verb = args.verbose
+    force = args.force
+
+    plist = []
+    mapinfo = "{}-map_{:d}_to_{:d}.map".format(_bname, start, stop)
+
+    if os.path.exists(mapinfo) and not force:
+        if verb:
+            print("# {} <= File exists".format(mapinfo))
+        with open(mapinfo, 'r') as m:
+            m.readline().strip()
+            for line in m:
+                path = [int(x) for x in line.strip().split(" => ")]
+                plist.append(path)
+    else:
+        mlist = []
+        for l in range(start+1, stop + 1):
+            sub_path = create_mapped_structure_path(_bname, l-1, l)
+            mlist.append(sub_path)
+            
+        plist = pathlist(mlist)
+        
+        with open(mapinfo, 'w') as m:
+            m.write("# Mapping information for barrier trees {:d} to {:d}\n".format(
+                start, stop))
+            for path in plist:
+                m.write(" => ".join(map("{:4d}".format, path)) + "\n")
+    return plist
+
 def add_barmap_args(parser):
     """ A collection of arguments that are used by BarMap """
     ril.argparse_add_arguments(parser,
@@ -585,6 +703,8 @@ def add_barmap_args(parser):
     parser.add_argument("--pyplot", action="store_true",
                         help="Plot the simulation using matplotlib. Interpret the legend \
           using the *log* output")
+    parser.add_argument("--pourRNA", action="store_true",
+                        help="Use pourRNA instead of barrierrs.")
     parser.add_argument("--xmgrace", action="store_true",
                         help="Print a plot for xmgrace. " +
                         "Interpret the legend using the *log* output")
@@ -636,20 +756,29 @@ def main(args):
     """# Starting with BarMap computations ... """
 
     while True:
-        print("""# writing RNAsubopt files ... """)
+        bfiles = None
+        plist = None
+
         sname = "{}/{}-ener_{:.2f}".format(args.tmpdir, args.name, args.s_ener)
-        #if args.circ: myfile += '_circ'
-        if args.noLP:
-            sname += '_noLP'
-        sfiles = barmap_subopts(sname, seq, args)
-
-        print("""# writing barriers files ... """)
-        bname = "{}-minh_{}-maxn_{}-k0_{}".format(sname,
-                                                  args.b_minh, args.b_maxn, args.k0)
-        bfiles = barmap_barriers(bname, seq, sfiles, args)
-
-        print("""# writing/parsing mapping information ... """)
-        plist = barmap_mapping(bname, seq, args)
+        bname = "{}-minh_{}-maxn_{}-k0_{}".format(sname, args.b_minh, args.b_maxn, args.k0)
+        if args.pourRNA:
+            print("""# computing pourRNA... """)
+            bfiles = barmap_pourRNA(bname, seq, args)
+    
+            print("""# writing/parsing mapping information ... """)
+            plist = barmap_mapping_pourRNA(bname, seq, args)
+        else:
+            #if args.circ: myfile += '_circ'
+            if args.noLP:
+                sname += '_noLP'
+            print("""# writing RNAsubopt files ... """)
+            sfiles = barmap_subopts(sname, seq, args)
+    
+            print("""# writing barriers files ... """)
+            bfiles = barmap_barriers(bname, seq, sfiles, args)
+    
+            print("""# writing/parsing mapping information ... """)
+            plist = barmap_mapping(bname, seq, args)
 
         print("""# simulations using treekin ... """)
         try:
@@ -661,14 +790,14 @@ def main(args):
                 print('repeating caluclations with higher energy:', args.s_ener)
             else:
                 print('caluclations failed with current suboptimal energy range:', args.s_ener)
-                break
+                exit()
         except SubprocessError as e:
             if args.adaptive:
                 args.s_ener += 2
                 print('repeating caluclations with higher energy:', args.s_ener)
             else:
                 print('caluclations failed with current suboptimal energy range:', args.s_ener)
-                break
+                exit()
 
     if args.xmgrace or args.pyplot:
         print("""# Processing treekin results for plotting ... """)

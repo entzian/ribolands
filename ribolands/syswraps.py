@@ -380,6 +380,134 @@ def sys_barriers(name, seq, sfile,
 
     return [sfile, bfile, efile, rfile, psfile, msfile]
 
+def sys_pourRNA(name, seq,
+                 pourRNA='pourRNA',
+                 max_energy=5,
+                 k0=1.0,
+                 temp=37.0,
+                 shift_moves=False,
+                 rates=True,
+                 binrates=False,
+                 mfile='',
+                 force=False,
+                 verb=False):
+    """Perform a system-call of the program ``pourRNA``.
+
+    The print the results into a file and return the respective filename. This
+    wrapper will return the output files, including ``STDIN`` and ``STDERR``.
+
+    Args:
+      name (str): Name of the sequence used to name the output file.
+      seq (str): Nucleic acid sequence.
+      temp (float, optional): Specify temperature in Celsius.
+      force (bool, optional): Overwrite existing files with the same name.
+      verb (bool, optional): Print the current system-call to ``stderr``.
+
+    Raises:
+      ExecError: Program does not exist.
+      SuboprocessError: Program terminated with exit code: ...
+
+    Returns:
+      [ bfile, rfile, efile, pfile]: A list of produced files containing
+        ``pourRNA`` results.
+    """
+
+    if which(pourRNA) is None:
+        raise ExecError(pourRNA, "pourRNA",
+                        'pourRNA path not found! Using default command...')
+
+    bfile = name + '.bar'
+    efile = name + '.err'
+    rfile = name + '.rts'
+    msfile = name + '.ms'
+
+    if not force and \
+            os.path.exists(bfile) and \
+            os.path.exists(rfile) and \
+            os.path.exists(efile):
+        if verb:
+            print("#", bfile, "<= Files exist")
+        return [ bfile, efile, rfile, msfile]
+
+
+    barcall = [ pourRNA, "--max-energy="+str(max_energy)+" --max-threads=8 --sequence", seq ]
+
+    if mfile != '':
+        barcall.extend(['--start-structure-file='+mfile])
+        
+    if shift_moves:
+        barcall.extend(['--move-set 1'])
+    else:
+        barcall.extend(['--move-set 0'])
+
+    barcall.extend(["-T", str(temp)])
+
+    if rates:
+        barcall.extend(['--barriers-like-output=bar'])
+    if binrates:
+        barcall.extend(['--binary-rates-file=rates.bin'])
+
+
+    if verb:
+        print('#', ' '.join(barcall), '2>', efile, '>', bfile)
+
+    with open(bfile, 'w') as bhandle, \
+            open(efile, 'w') as ehandle:
+        proc = sub.Popen(' '.join(barcall), stdout=bhandle, stderr=ehandle, shell=True)
+        proc.communicate(None)
+        if proc.returncode:
+            call = "{} 2> {} > {}".format(
+                ' '.join(barcall), efile, bfile)
+            raise SubprocessError(proc.returncode, call)
+    
+    os.rename("bar_states.out", bfile)
+    os.rename("bar_rates.out", 'rates.out')
+    
+    if rates:
+        if k0 != 1.0:
+            if binrates:
+                with open('rates.bin', 'rb') as rf, open(rfile, 'wb') as new:
+                    dim, = unpack('i', rf.read(4))
+                    new.write(pack("i", dim))
+                    for e in range(dim * dim):
+                        r, = unpack('d', rf.read(8))
+                        new.write(pack("d", r * k0))
+                os.rename('rates.out', rfile + '2')
+                os.remove('rates.bin')
+            else:
+                with open('rates.out', 'r') as rf, open(rfile, 'w') as new:
+                    lines = rf.readlines()
+                    if len(lines) < 1:
+                        print("Error: rates file not valid!")
+                    dim = len(lines[0].split())
+                    #dim, = unpack('i', rf.read(4))
+                    rm = []
+                    for i in range(dim):
+                        #col = []
+                        row = [ float(x) * k0 for x in lines[i].split() ]
+                        #for j in range(dim):
+                            #r, = unpack('d', rf.read(8))
+                            #col.append(r * k0)
+                        rm.append(row)
+                    for line in zip(*rm):
+                        newline = "".join(map("{:10.4g}".format, line))
+                        new.write(newline + "\n")
+                os.remove('rates.out')
+            
+        else:
+            if binrates:
+                os.rename('rates.bin', rfile)
+                os.rename('rates.out', rfile + '2')
+            else:
+                os.remove('rates.bin')
+                os.rename('rates.out', rfile)
+        #os.remove('treeR.ps')
+
+    if mfile:
+        os.rename("mapped_structures.csv", msfile)
+
+    return [bfile, efile, rfile, msfile]
+
 
 def sys_suboptimals(name, seq,
                     RNAsubopt='RNAsubopt',
