@@ -434,6 +434,7 @@ def sys_pourRNA(name, seq,
 
     if mfile != '':
         barcall.extend(['--start-structure-file='+mfile])
+        barcall.extend(['--map-structures='+msfile])
         
     if shift_moves:
         barcall.extend(['--move-set 1'])
@@ -503,8 +504,8 @@ def sys_pourRNA(name, seq,
                 os.rename('rates.out', rfile)
         #os.remove('treeR.ps')
 
-    if mfile:
-        os.rename("mapped_structures.csv", msfile)
+    #if mfile:
+    #    os.rename("mapped_structures.csv", msfile)
 
     return [bfile, efile, rfile, msfile]
 
