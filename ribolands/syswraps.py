@@ -417,6 +417,7 @@ def sys_pourRNA(name, seq,
                         'pourRNA path not found! Using default command...')
 
     bfile = name + '.bar'
+    bfilezip = name + '.bar.zip'
     efile = name + '.err'
     rfile = name + '.rts'
     msfile = name + '.ms'
@@ -445,25 +446,47 @@ def sys_pourRNA(name, seq,
 
     if rates:
         barcall.extend(['--barriers-like-output=bar'])
-    if binrates:
+    if rates and binrates:
         barcall.extend(['--binary-rates-file=rates.bin'])
-
+        #barcall.extend(['--binary-rates-file-sparse=rates_sparse.bin'])
+        
+    #zip output
+    #barcall.extend([' | gzip - '])
 
     if verb:
         print('#', ' '.join(barcall), '2>', efile, '>', bfile)
 
-    with open(bfile, 'w') as bhandle, \
+    with open(bfilezip, 'w') as bhandle, \
             open(efile, 'w') as ehandle:
-        proc = sub.Popen(' '.join(barcall), stdout=bhandle, stderr=ehandle, shell=True)
-        proc.communicate(None)
-        if proc.returncode:
+        proc = sub.Popen(' '.join(barcall), stdout=sub.PIPE, stderr=sub.PIPE, shell=True)
+        proc2 = sub.Popen(['gzip -'], stdin=proc.stdout, stdout=bhandle, stderr=ehandle, shell=True) 
+        proc2.communicate(None)
+        if proc2.returncode:
             call = "{} 2> {} > {}".format(
-                ' '.join(barcall), efile, bfile)
-            raise SubprocessError(proc.returncode, call)
+                ' '.join(barcall), efile, bfilezip)
+            raise SubprocessError(proc2.returncode, call)
     
-    os.rename("bar_states.out", bfile)
-    os.rename("bar_rates.out", 'rates.out')
     
+    if rates:
+        os.rename("bar_states.out", bfile)
+        os.rename("bar_rates.out", 'rates.out')
+    
+    """    
+    if rates and binrates:
+        #create states file
+        with open(bfile, 'w') as bhandle, \
+        open(efile, 'w+') as ehandle:
+            to_call = [ "cat", bfilezip ]
+            proc = sub.Popen(' '.join(to_call), stdout=sub.PIPE, stderr=sub.PIPE, shell=True)
+            proc2 = sub.Popen(['gunzip -'], stdin=proc.stdout, stdout=sub.PIPE, stderr=sub.PIPE, shell=True) 
+            proc3 = sub.Popen(['awk \'{if($1 ~ /Sequence:/){print $2}else{if($0 ~ /\s*\[[\.\(\)]+\]/){str=$2;str=substr($2,2,length($2)-2);print $1,str;}}}\''], stdin=proc2.stdout, stdout=bhandle, stderr=ehandle, shell=True) 
+            proc3.communicate(None)
+            if proc3.returncode:
+                call = "{} 2> {} > {}".format(
+                    ' '.join(barcall), efile, bfile)
+                raise SubprocessError(proc3.returncode, call)
+    """
+            
     if rates:
         if k0 != 1.0:
             if binrates:
@@ -473,7 +496,7 @@ def sys_pourRNA(name, seq,
                     for e in range(dim * dim):
                         r, = unpack('d', rf.read(8))
                         new.write(pack("d", r * k0))
-                os.rename('rates.out', rfile + '2')
+                #os.rename('rates.out', rfile + '2')
                 os.remove('rates.bin')
             else:
                 with open('rates.out', 'r') as rf, open(rfile, 'w') as new:
@@ -498,7 +521,8 @@ def sys_pourRNA(name, seq,
         else:
             if binrates:
                 os.rename('rates.bin', rfile)
-                os.rename('rates.out', rfile + '2')
+                os.remove('rates.out')
+                #os.rename('rates.out', rfile + '2')
             else:
                 os.remove('rates.bin')
                 os.rename('rates.out', rfile)
