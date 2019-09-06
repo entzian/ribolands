@@ -386,6 +386,10 @@ def sys_pourRNA(name, seq,
                  k0=1.0,
                  temp=37.0,
                  shift_moves=False,
+                 max_threads=1,
+                 best_k=None,
+                 dynamic_best_k=False,
+                 delta_e=None,
                  rates=True,
                  binrates=False,
                  mfile='',
@@ -431,7 +435,7 @@ def sys_pourRNA(name, seq,
         return [ bfile, efile, rfile, msfile]
 
 
-    barcall = [ pourRNA, "--max-energy="+str(max_energy)+" --max-threads=8 --sequence", seq ]
+    barcall = [ pourRNA, "--skip-diagonal --max-energy="+str(max_energy)+" --max-threads="+str(max_threads)+" --sequence", seq ]
 
     if mfile != '':
         barcall.extend(['--start-structure-file='+mfile])
@@ -441,6 +445,13 @@ def sys_pourRNA(name, seq,
         barcall.extend(['--move-set 1'])
     else:
         barcall.extend(['--move-set 0'])
+    
+    if best_k != None:
+        barcall.extend(['--filter-best-k',str(best_k)])
+    if dynamic_best_k:
+        barcall.extend(['--dynamic-best-k'])
+    if delta_e != None:
+        barcall.extend(['--delta-e',str(delta_e)])
 
     barcall.extend(["-T", str(temp)])
 

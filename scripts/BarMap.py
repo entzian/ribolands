@@ -572,8 +572,11 @@ def pathlist(mapdata):
 
 
 def barmap_pourRNA(_bname, seq, args):
+    shift_moves = False
+    if args.move_set == 1:
+        shift_moves=True
+    
     """ Print barriers files and mapping info """
-
     bfiles = []
     prog = ril.ProgressBar(args.stop - args.start + 1)
     for e, l in enumerate(range(args.start, args.stop + 1)):
@@ -598,10 +601,14 @@ def barmap_pourRNA(_bname, seq, args):
 
         [ bfile, efile, rfile, msfile] = ril.sys_pourRNA(cname, cseq,
                                                                          pourRNA='pourRNA',
-                                                                         max_energy=5,
+                                                                         max_energy=args.max_energy,
                                                                          k0=args.k0,
                                                                          temp=args.temperature,
-                                                                         shift_moves=False,
+                                                                         shift_moves=shift_moves,
+                                                                         max_threads=args.max_threads,
+                                                                         best_k=args.filter_best_k,
+                                                                         dynamic_best_k=args.dynamic_best_k,
+                                                                         delta_e=args.delta_e,
                                                                          rates=True,
                                                                          binrates=True,
                                                                          mfile=mfile,
@@ -693,6 +700,7 @@ def add_barmap_args(parser):
     ril.argparse_add_arguments(parser,
                                RNAsubopt=True,
                                barriers=True,
+                               pourRNA=True,
                                treekin=True,
                                noLP=True, temperature=True,
                                tmpdir=True, name=True, force=True, verbose=True,
@@ -736,16 +744,19 @@ def main(args):
 
     print("# Input: {:s} {:s}".format(name, seq))
 
-    if args.s_ener is None:
-        args.s_ener, args.s_maxn = ril.sys_subopt_range(seq,
-                nos=args.s_maxn, maxe=args.s_maxe, verb=(args.verbose > 0))
-        print("# Energyrange {:.2f} computes {:d} sequences".format(
-            args.s_ener, args.s_maxn))
-    elif args.verbose:
-        args.s_ener, args.s_maxn = ril.sys_subopt_range(seq,
-                                                        nos=0, maxe=args.s_ener, verb=False)
-        print("# Energyrange {:.2f} computes {:d} sequences".format(
-            args.s_ener, args.s_maxn))
+    if args.pourRNA:
+        args.s_ener = args.max_energy
+    else:
+        if args.s_ener is None:
+            args.s_ener, args.s_maxn = ril.sys_subopt_range(seq,
+                    nos=args.s_maxn, maxe=args.s_maxe, verb=(args.verbose > 0))
+            print("# Energyrange {:.2f} computes {:d} sequences".format(
+                args.s_ener, args.s_maxn))
+        elif args.verbose:
+            args.s_ener, args.s_maxn = ril.sys_subopt_range(seq,
+                                                            nos=0, maxe=args.s_ener, verb=False)
+            print("# Energyrange {:.2f} computes {:d} sequences".format(
+                args.s_ener, args.s_maxn))
 
     if not args.tmpdir:
         args.tmpdir = 'BarMap_' + args.name

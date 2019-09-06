@@ -53,7 +53,7 @@ class ProgressBar(object):
 
 
 def argparse_add_arguments(parser,
-                           RNAsubopt=False, barriers=False, treekin=False,
+                           RNAsubopt=False, barriers=False, pourRNA=False,treekin=False,
                            noLP=False, temperature=False, circ=False,
                            tmpdir=False, name=False, force=False, verbose=False,
                            start=False, stop=False, k0=False, tX=False, cutoff=False):
@@ -69,92 +69,113 @@ def argparse_add_arguments(parser,
 
     # ViennaRNA suboptimal structures:
     if RNAsubopt:
-        parser.add_argument("--RNAsubopt", default='RNAsubopt', action='store',
+        group_subopt = parser.add_argument_group('RNAsubopt')
+        group_subopt.add_argument("--RNAsubopt", default='RNAsubopt', action='store',
                             metavar='<str>',
                             help="Specify path to your *RNAsubopt* executable")
         # TODO: old version allows '-e' and sets default=0
-        parser.add_argument("--s-ener", type=float, default=None, metavar='<flt>',
+        group_subopt.add_argument("--s-ener", type=float, default=None, metavar='<flt>',
                             help="Set the energy range for suboptimal structure computation." +
                             " This will overwrite the options --s-maxe and --s-maxn.")
-        parser.add_argument("--s-maxe", type=float, default=20, metavar='<flt>',
+        group_subopt.add_argument("--s-maxe", type=float, default=20, metavar='<flt>',
                             help="Set a the maximum subopt range in combination with --s-maxn.")
-        parser.add_argument("--s-maxn", type=int, default=7100000, metavar='<int>',
+        group_subopt.add_argument("--s-maxn", type=int, default=7100000, metavar='<int>',
                             help="Specify the number of suboptimal structures. The corresponding" +
                             " energy range is computed form the full length molecule.")
 
     # *barriers* arguments using argparse
     if barriers:
-        parser.add_argument("--barriers", default='barriers', action='store',
+        group_barriers = parser.add_argument_group('barriers')
+        group_barriers.add_argument("--barriers", default='barriers', action='store',
                             metavar='<str>',
                             help="Specify path to your *barriers* executable")
-        parser.add_argument("--b-minh", type=float, default=0.001, metavar='<flt>',
+        group_barriers.add_argument("--b-minh", type=float, default=0.001, metavar='<flt>',
                             help="Set the minimum barrier height (i.e. barriers --minh)")
-        parser.add_argument("--b-maxn", type=int, default=100, metavar='<int>',
+        group_barriers.add_argument("--b-maxn", type=int, default=100, metavar='<int>',
                             help="Set the maximum number of local minima (i.e. barriers --max)")
 
+    if pourRNA:
+        group_pourRNA = parser.add_argument_group('pourRNA')
+        group_pourRNA.add_argument("--max-energy", type=int, default=5, metavar='<int>',
+                            help="Maximum energy threshold for structure enumeration for pourRNA.")
+        group_pourRNA.add_argument("--max-threads", type=int, default=1, metavar='<int>',
+                            help="Maximum number of parallel threads for pourRNA.")
+        group_pourRNA.add_argument("--filter-best-k", type=int, default=5, metavar='<int>',
+                            help="reduces outgoing transitions to the best K for each gradient basin for pourRNA.")
+        group_pourRNA.add_argument("--dynamic-best-k", action='store_true',
+                            help=" Increases K if the MFE structure is not explored (for pourRNA).")
+        group_pourRNA.add_argument("--delta-e", type=int, default=None, metavar='<int>',
+                            help="Set the maximum energy difference that states in a basin can have w.r.t. the local minimum (in kcal/mol) (for pourRNA).")
+        group_pourRNA.add_argument("--move-set", type=int, default=0, metavar='<int>',
+                            help="Move set: 0 = insertion and deletion, 1 = shift moves (for pourRNA).")
+                                
     # *treekin* arguments using argparse
     if treekin:
-        parser.add_argument("--treekin", default='treekin', action='store',
+        group_treekin = parser.add_argument_group('treekin')
+        group_treekin.add_argument("--treekin", default='treekin', action='store',
                             metavar='<str>',
                             help="Specify path to your *treekin* executable")
         # TODO: (--t0) set an appropriate default value, or None!
-        parser.add_argument("--t0", type=float, default=0, metavar='<flt>',
+        group_treekin.add_argument("--t0", type=float, default=0, metavar='<flt>',
                             help="First time point of the printed time-course")
-        parser.add_argument("--ti", type=float, default=1.2, metavar='<flt>',
+        group_treekin.add_argument("--ti", type=float, default=1.2, metavar='<flt>',
                             help="Output-time increment of solver (t1 * ti = t2)")
-        parser.add_argument("--t8", type=float, default=0.02, metavar='<flt>',
+        group_treekin.add_argument("--t8", type=float, default=0.02, metavar='<flt>',
                             help="Transcription speed in seconds per nucleotide")
-        parser.add_argument("--p0", nargs='+', default=['1=1'], metavar='<int>=<flt>',
+        group_treekin.add_argument("--p0", nargs='+', default=['1=1'], metavar='<int>=<flt>',
                             help="Initial population vector as a space-separated list of " +
                             "assigments \"index=occupancy\"")
 
     # ViennaRNA model arguments:
+    group_vrna_model = parser.add_argument_group('ViennaRNA model arguments')
     if noLP:
-        parser.add_argument("--noLP", action="store_true",
+        group_vrna_model.add_argument("--noLP", action="store_true",
                             help="The ViennaRNA --noLP option")
     if temperature:
-        parser.add_argument("-T", "--temperature", type=float, default=37.0,
+        group_vrna_model.add_argument("-T", "--temperature", type=float, default=37.0,
                             metavar='<flt>', help="The temperature for ViennaRNA computations")
     if circ:
-        parser.add_argument("--circ", action="store_true",
+        group_vrna_model.add_argument("--circ", action="store_true",
                             help="Circular RNA")
 
     # Other, commonly used arguments:
+    group_general = parser.add_argument_group('general arguments')
     if tmpdir:
-        parser.add_argument("--tmpdir", default='', action='store',
+        group_general.add_argument("--tmpdir", default='', action='store',
                             metavar='<str>',
                             help="Specify path for storing temporary output files. " +
                             "These files will not be removed when the program terminates.")
     if name:
-        parser.add_argument("--name", default='', metavar='<str>',
+        group_general.add_argument("--name", default='', metavar='<str>',
                             help="Name your output files, this option overwrites the fasta-header")
     if force:
-        parser.add_argument("-f", "--force", action="store_true",
+        group_general.add_argument("-f", "--force", action="store_true",
                             help="Force to overwrite existing BarMap files.")
     if verbose:
-        parser.add_argument("-v", "--verbose", action='count', default=0,
+        group_general.add_argument("-v", "--verbose", action='count', default=0,
                             help="Track process by writing verbose output during calculations.")
 
     # Convenient arguments for cotranscriptional folding
+    group_cotrans = parser.add_argument_group('cotranskriptional folding arguments')
     if start:
-        parser.add_argument("--start", type=int, default=1, metavar='<int>',
+        group_cotrans.add_argument("--start", type=int, default=1, metavar='<int>',
                             help="Start transcription at this nucleotide")
     if stop:
-        parser.add_argument("--stop", type=int, default=None, metavar='<int>',
+        group_cotrans.add_argument("--stop", type=int, default=None, metavar='<int>',
                             help="Stop transcription at this nucleotide")
 
     if k0:
         # TODO: barriers does not support this argument, it is a hack after all.
         # there is a --times argument for treekin which can be used instead.
-        parser.add_argument("--k0", type=float, default=2e5, metavar='<flt>',
+        group_cotrans.add_argument("--k0", type=float, default=2e5, metavar='<flt>',
                             help="Arrhenius rate prefactor")
 
     if tX:
-        parser.add_argument("--tX", type=float, default=60, metavar='<flt>',
+        group_cotrans.add_argument("--tX", type=float, default=60, metavar='<flt>',
                             help="Simulation time after transcription")
 
     if cutoff:
-        parser.add_argument("--occupancy-cutoff", type=float, default=0.01, metavar='<flt>',
+        group_cotrans.add_argument("--occupancy-cutoff", type=float, default=0.01, metavar='<flt>',
                             help="Occupancy cutoff for population transfer.")
 
 
